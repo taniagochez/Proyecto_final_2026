@@ -2,10 +2,10 @@ import cors from 'cors'
 import express from 'express'
 import swaggerUi from 'swagger-ui-express'
 import { openapi } from './openapi'
-import routes from './routes'
-
+import routes, { UPLOADS_DIR } from './routes'
 const app = express()
 app.use(cors(), express.json())
+app.use('/api/uploads/productos', express.static(UPLOADS_DIR))
 app.get('/api/openapi.json', (_q, res) => res.json(openapi))
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi, { customSiteTitle: 'API Yli Gochez' }))
 app.use('/api', routes)

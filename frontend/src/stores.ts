@@ -16,8 +16,12 @@ export const useInventory = defineStore('inventory', () => {
   const entrada = async (insumoId: string, cantidad: number) => {
     await api.post(`/insumos/${insumoId}/entradas`, { cantidad }); await cargarAdmin()
   }
+    const crearProducto = async (datos: FormData) => {
+    await api.post('/productos', datos) // axios detecta FormData y arma el multipart solo
+    await cargarProductos()
+  }
   cargarProductos().catch(() => {})
-  return { productos, insumos, movimientos, bajos, cargarProductos, cargarAdmin, entrada }
+    return { productos, insumos, movimientos, bajos, cargarProductos, cargarAdmin, entrada, crearProducto }
 })
 
 export const useCart = defineStore('cart', () => {

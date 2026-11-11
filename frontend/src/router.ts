@@ -10,6 +10,7 @@ const router = createRouter({
     { path: '/login', component: () => import('./views/Login.vue') },
     { path: '/pedidos', component: () => import('./views/Orders.vue'), meta: { roles: ['Administrador', 'Encargado'] } },
     { path: '/inventario', component: () => import('./views/Inventory.vue'), meta: { roles: ['Administrador'] } },
+    { path: '/productos/nuevo', component: () => import('./views/ProductForm.vue'), meta: { roles: ['Administrador'] } },
     { path: '/dashboard', component: () => import('./views/Dashboard.vue'), meta: { roles: ['Administrador'] } }
   ]
 })

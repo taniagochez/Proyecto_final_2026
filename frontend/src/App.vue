@@ -24,6 +24,7 @@ const irCheckout = () => { drawer.value = false; router.push('/checkout') }
         <v-btn v-if="auth.user.rol !== 'Cliente'" to="/pedidos" variant="text">Pedidos</v-btn>
         <template v-if="auth.user.rol === 'Administrador'">
           <v-btn to="/inventario" variant="text">Inventario</v-btn>
+          <v-btn to="/productos/nuevo" variant="text">Nuevo producto</v-btn>
           <v-btn to="/dashboard" variant="text">Dashboard</v-btn>
         </template>
         <v-btn :prepend-icon="mdiLogout" variant="text" @click="salir">Salir</v-btn>

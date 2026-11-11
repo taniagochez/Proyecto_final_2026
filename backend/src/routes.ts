@@ -1,7 +1,10 @@
 import { NextFunction, Request, Response, Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { db, disponible, ESTADOS, Estado, persist, Rol, uid } from './db'
+import multer from 'multer'
+import path from 'path'
+import fs from 'fs'
+import { db, disponible, ESTADOS, Estado, persist, Producto, Rol, uid } from './db'
 
 const SECRET = process.env.JWT_SECRET || 'hi-gochez-dev-secret'
 const r = Router()
@@ -20,6 +23,26 @@ const ADMIN: Rol[] = ['Administrador'], STAFF: Rol[] = ['Administrador', 'Encarg
 const mov = (ref: string, tipo: 'entrada' | 'salida', cantidad: number, pedidoId?: string) =>
   db.movimientos.unshift({ id: uid(), ref, tipo, cantidad, fecha: new Date().toISOString(), pedidoId })
 
+// ---------- Subida de imágenes de productos ----------
+export const UPLOADS_DIR = path.join(__dirname, '..', 'uploads', 'productos')
+fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+
+const EXT: Record<string, string> = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' }
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOADS_DIR,
+    filename: (_req, file, cb) => cb(null, uid() + uid() + EXT[file.mimetype])
+  }),
+  limits: { fileSize: 3 * 1024 * 1024 }, // 3 MB
+  fileFilter: (_req, file, cb) => (EXT[file.mimetype] ? cb(null, true) : cb(new Error('Solo se permiten imágenes JPG, PNG o WEBP')))
+})
+// Envuelve a multer para devolver los errores como JSON (y no como página HTML)
+const subir = (req: Request, res: Response, next: NextFunction) =>
+  upload.single('imagen')(req, res, (e) => {
+    if (!e) return next()
+    const msg = e instanceof multer.MulterError && e.code === 'LIMIT_FILE_SIZE' ? 'La imagen supera los 3 MB' : (e as Error).message
+    res.status(400).json({ error: msg })
+  })
 r.post('/auth/login', (req, res) => {
   const { correo, password } = req.body ?? {}
   const u = db.usuarios.find((x) => x.correo === String(correo ?? '').trim())
@@ -33,6 +56,35 @@ r.get('/productos', (req, res) => {
   res.json(db.productos.filter((p) => !cat || p.categoria === cat).map((p) => ({ ...p, disponible: disponible(p) })))
 })
 
+r.post('/productos', auth(...ADMIN), subir, (req, res) => {
+  const b = req.body ?? {}
+  // Si algo falla, borramos la foto que ya se alcanzó a guardar
+  const err = (m: string) => { if (req.file) fs.unlink(req.file.path, () => {}); res.status(400).json({ error: m }) }
+
+  const nombre = String(b.nombre ?? '').trim()
+  const categoria = String(b.categoria ?? '').trim()
+  const precio = Number(b.precio), stock = Number(b.stock)
+  if (nombre.length < 3) return err('El nombre debe tener al menos 3 caracteres')
+  if (db.productos.some((p) => p.nombre.toLowerCase() === nombre.toLowerCase())) return err('Ya existe un producto con ese nombre')
+  if (!categoria) return err('La categoría es obligatoria')
+  if (!(precio > 0)) return err('El precio debe ser mayor a 0')
+  if (!Number.isInteger(stock) || stock < 0) return err('El stock debe ser un entero mayor o igual a 0')
+
+  let receta: Producto['receta']
+  try { receta = JSON.parse(b.receta || '[]') } catch { return err('Receta inválida') }
+  if (!Array.isArray(receta) || receta.some((x) => !db.insumos.some((i) => i.id === x?.insumoId) || !(Number(x.cantidad) > 0)))
+    return err('Receta inválida: revisa los insumos y cantidades')
+
+  const producto: Producto = {
+    id: 'p' + uid(), nombre, categoria, precio, stock,
+    descripcion: String(b.descripcion ?? '').trim().slice(0, 300),
+    icono: String(b.icono || '💐').slice(0, 4),
+    imagen: req.file ? `/api/uploads/productos/${req.file.filename}` : undefined,
+    receta: receta.map((x) => ({ insumoId: x.insumoId, cantidad: Number(x.cantidad) }))
+  }
+  db.productos.push(producto); persist()
+  res.status(201).json({ ...producto, disponible: disponible(producto) })
+})
 r.get('/insumos', auth(...ADMIN), (_q, res) => res.json(db.insumos))
 r.post('/insumos/:id/entradas', auth(...ADMIN), (req, res) => {
   const i = db.insumos.find((x) => x.id === req.params.id)
