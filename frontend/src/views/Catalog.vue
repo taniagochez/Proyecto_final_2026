@@ -23,7 +23,8 @@ const agregar = (p: Producto) => {
   <v-row>
     <v-col v-for="p in lista" :key="p.id" cols="12" sm="6" md="4">
       <v-card height="100%" class="d-flex flex-column">
-        <v-sheet color="surface-variant" class="d-flex align-center justify-center" height="140" style="font-size: 64px">{{ p.icono }}</v-sheet>
+       <v-img v-if="p.imagen" :src="p.imagen" :alt="p.nombre" height="180" cover />
+        <v-sheet v-else color="surface-variant" class="d-flex align-center justify-center" height="180" style="font-size: 64px">{{ p.icono }}</v-sheet>
         <v-card-title>{{ p.nombre }}</v-card-title>
         <v-card-text class="flex-grow-1">
           {{ p.descripcion }}

@@ -40,7 +40,13 @@ const irCheckout = () => { drawer.value = false; router.push('/checkout') }
     <v-navigation-drawer v-model="drawer" location="right" temporary width="340">
       <v-list-subheader class="mt-2">Tu carrito</v-list-subheader>
       <v-list v-if="cart.lineas.length">
-        <v-list-item v-for="l in cart.lineas" :key="l.p.id" :title="`${l.p.icono} ${l.p.nombre}`" :subtitle="`${l.cantidad} × ${money(l.p.precio)}`">
+        <v-list-item v-for="l in cart.lineas" :key="l.p.id" :title="l.p.nombre" :subtitle="`${l.cantidad} × ${money(l.p.precio)}`">
+          <template #prepend>
+            <v-avatar rounded class="mr-3" size="48">
+              <v-img v-if="l.p.imagen" :src="l.p.imagen" cover />
+              <span v-else>{{ l.p.icono }}</span>
+            </v-avatar>
+          </template>
           <template #append><v-btn :icon="mdiMinus" size="x-small" color="primary" @click="cart.restar(l.p.id)" /></template>
         </v-list-item>
       </v-list>
