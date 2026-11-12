@@ -2,9 +2,11 @@ import { NextFunction, Request, Response, Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { db, disponible, ESTADOS, Estado, persist, Rol, uid } from './db'
+import chat from './chat'
 
 const SECRET = process.env.JWT_SECRET || 'hi-gochez-dev-secret'
 const r = Router()
+r.use(chat) // POST /api/chat — asistente de IA
 
 /** Middleware JWT con control de rol. Sin roles = cualquier usuario autenticado. */
 const auth = (...roles: Rol[]) => (req: Request, res: Response, next: NextFunction) => {

@@ -11,7 +11,7 @@ export const openapi = {
   openapi: '3.0.3',
   info: { title: 'API Yli Gochez Floristería y Detalles', version: '1.0.0', description: 'Pedidos con retiro en local y control automatizado de inventario.\n\nUsuarios demo: `admin@hi.com / admin123`, `encargado@hi.com / encargado123` y `cliente@hi.com / cliente123`. Usa **Authorize** con el token de `/auth/login`.' },
   servers: [{ url: '/api' }],
-  tags: [{ name: 'Auth' }, { name: 'Catálogo' }, { name: 'Pedidos' }, { name: 'Inventario' }, { name: 'Dashboard' }],
+  tags: [{ name: 'Auth' }, { name: 'Asistente IA' }, { name: 'Catálogo' }, { name: 'Pedidos' }, { name: 'Inventario' }, { name: 'Dashboard' }],
   components: {
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
     schemas: {
@@ -42,10 +42,13 @@ export const openapi = {
           total: { type: 'number' }, mensajeTarjeta: { type: 'string' }, metodoPago: { type: 'string' }
         }
       },
+      ChatInput: { type: 'object', required: ['messages'], properties: { messages: { type: 'array', description: 'Historial de la conversación; el último mensaje debe ser del usuario', items: { type: 'object', required: ['role', 'content'], properties: { role: { type: 'string', enum: ['user', 'assistant'] }, content: { type: 'string', maxLength: 1000 } } }, example: [{ role: 'user', content: 'Busco un regalo de aniversario' }] } } },
+      ChatResponse: { type: 'object', properties: { reply: { type: 'string' }, productos: { type: 'array', description: 'Ids de productos recomendados (para mostrar con botón Agregar)', items: { type: 'string' }, example: ['p3'] } } },
       Dashboard: { type: 'object', properties: { ingresos: { type: 'number' }, pedidos: { type: 'integer' }, ticketPromedio: { type: 'number' }, insumosBajos: { type: 'integer' }, top: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, cantidad: { type: 'integer' } } } } } }
     }
   },
   paths: {
+    '/chat': { post: { tags: ['Asistente IA'], summary: 'Conversar con el asistente de IA (público). Conoce el catálogo y la disponibilidad actuales', requestBody: { required: true, content: json(ref('ChatInput')) }, responses: { ...ok('Respuesta del asistente', ref('ChatResponse')), ...errs('400', '429', '502', '503') } } },
     '/auth/login': { post: { tags: ['Auth'], summary: 'Iniciar sesión (devuelve JWT)', requestBody: { required: true, content: json(ref('LoginInput')) }, responses: { ...ok('Sesión iniciada', ref('LoginResponse')), ...errs('401') } } },
     '/productos': { get: { tags: ['Catálogo'], summary: 'Listar productos con disponibilidad', parameters: [{ name: 'categoria', in: 'query', schema: { type: 'string' }, description: 'Filtrar por ocasión' }], responses: ok('Lista de productos', arr('Producto')) } },
     '/pedidos': {

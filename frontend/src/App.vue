@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { mdiFlower, mdiCartOutline, mdiMinus, mdiLogout, mdiStoreClock, mdiShieldAccount, mdiAccountCog, mdiAccount } from '@mdi/js'
 import { useAuth, useCart } from './stores'
+import ChatWidget from './components/ChatWidget.vue'
 
 const auth = useAuth(), cart = useCart(), router = useRouter()
 const drawer = ref(false)
@@ -58,6 +59,7 @@ const irCheckout = () => { drawer.value = false; router.push('/checkout') }
     </v-navigation-drawer>
 
     <v-main class="bg-surface-variant"><v-container><router-view /></v-container></v-main>
+    <ChatWidget />
   </v-app>
 </template>
 
