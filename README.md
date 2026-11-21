@@ -47,6 +47,8 @@ Extensión recomendada: **Vue - Official (Volar)**.
 | PATCH | `/api/pedidos/{id}/estado` | Administrador / Encargado |
 | GET | `/api/insumos`, `/api/movimientos`, `/api/dashboard` | Administrador |
 | POST | `/api/insumos/{id}/entradas` | Administrador |
+| POST | `/api/pedidos/{id}/factura` | Administrador / Encargado — solo pedidos en estado *Entregado*, una factura por pedido |
+| GET | `/api/facturas`, `/api/facturas/{id}` | Administrador / Encargado |
 
 ## Notas
 - Persistencia: archivo `backend/data.json` (se crea solo con datos de ejemplo; bórralo para reiniciar).

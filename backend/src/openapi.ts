@@ -11,7 +11,7 @@ export const openapi = {
   openapi: '3.0.3',
   info: { title: 'API Yli Gochez Floristería y Detalles', version: '1.0.0', description: 'Pedidos con retiro en local y control automatizado de inventario.\n\nUsuarios demo: `admin@hi.com / admin123`, `encargado@hi.com / encargado123` y `cliente@hi.com / cliente123`. Usa **Authorize** con el token de `/auth/login`.' },
   servers: [{ url: '/api' }],
-  tags: [{ name: 'Auth' }, { name: 'Asistente IA' }, { name: 'Catálogo' }, { name: 'Pedidos' }, { name: 'Inventario' }, { name: 'Dashboard' }],
+  tags: [{ name: 'Auth' }, { name: 'Asistente IA' }, { name: 'Catálogo' }, { name: 'Pedidos' }, { name: 'Facturas' }, { name: 'Inventario' }, { name: 'Dashboard' }],
   components: {
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
     schemas: {
@@ -39,7 +39,16 @@ export const openapi = {
           id: { type: 'string', example: 'P-0001' }, cliente: { type: 'object', properties: { nombre: { type: 'string' }, telefono: { type: 'string' } } },
           retiro: { type: 'string', format: 'date-time' }, estado: ref('Estado'),
           items: { type: 'array', items: { type: 'object', properties: { productoId: { type: 'string' }, nombre: { type: 'string' }, cantidad: { type: 'integer' }, precio: { type: 'number' } } } },
-          total: { type: 'number' }, mensajeTarjeta: { type: 'string' }, metodoPago: { type: 'string' }
+          total: { type: 'number' }, mensajeTarjeta: { type: 'string' }, metodoPago: { type: 'string' },
+          facturaId: { type: 'string', example: 'F-0001', description: 'Presente si el pedido ya fue facturado' }
+        }
+      },
+      Factura: {
+        type: 'object', properties: {
+          id: { type: 'string', example: 'F-0001' }, pedidoId: { type: 'string', example: 'P-0001' }, fecha: { type: 'string', format: 'date-time' },
+          cliente: { type: 'object', properties: { nombre: { type: 'string' }, telefono: { type: 'string' } } },
+          items: { type: 'array', items: { type: 'object', properties: { productoId: { type: 'string' }, nombre: { type: 'string' }, cantidad: { type: 'integer' }, precio: { type: 'number' } } } },
+          total: { type: 'number' }, metodoPago: { type: 'string' }, emitidaPor: ref('Usuario')
         }
       },
       ChatInput: { type: 'object', required: ['messages'], properties: { messages: { type: 'array', description: 'Historial de la conversación; el último mensaje debe ser del usuario', items: { type: 'object', required: ['role', 'content'], properties: { role: { type: 'string', enum: ['user', 'assistant'] }, content: { type: 'string', maxLength: 1000 } } }, example: [{ role: 'user', content: 'Busco un regalo de aniversario' }] } } },
@@ -56,6 +65,9 @@ export const openapi = {
       post: { tags: ['Pedidos'], summary: 'Crear pedido para retiro en local (público). Descuenta producto e insumos', requestBody: { required: true, content: json(ref('PedidoInput')) }, responses: { ...ok('Pedido creado', ref('Pedido'), '201'), ...errs('400', '404', '409') } }
     },
     '/pedidos/{id}/estado': { patch: { tags: ['Pedidos'], summary: 'Cambiar estado del pedido', security: sec, parameters: [idParam], requestBody: { required: true, content: json({ type: 'object', required: ['estado'], properties: { estado: ref('Estado') } }) }, responses: { ...ok('Pedido actualizado', ref('Pedido')), ...errs('400', '401', '403', '404') } } },
+    '/pedidos/{id}/factura': { post: { tags: ['Facturas'], summary: 'Generar factura de un pedido ya entregado (Administrador/Encargado)', security: sec, parameters: [idParam], responses: { ...ok('Factura generada', ref('Factura'), '201'), ...errs('401', '403', '404', '409') } } },
+    '/facturas': { get: { tags: ['Facturas'], summary: 'Listar facturas emitidas (Administrador/Encargado)', security: sec, responses: { ...ok('Facturas', arr('Factura')), ...errs('401', '403') } } },
+    '/facturas/{id}': { get: { tags: ['Facturas'], summary: 'Obtener una factura (Administrador/Encargado)', security: sec, parameters: [idParam], responses: { ...ok('Factura', ref('Factura')), ...errs('401', '403', '404') } } },
     '/insumos': { get: { tags: ['Inventario'], summary: 'Listar insumos (Administrador)', security: sec, responses: { ...ok('Insumos', arr('Insumo')), ...errs('401', '403') } } },
     '/insumos/{id}/entradas': { post: { tags: ['Inventario'], summary: 'Registrar entrada de almacén (Administrador)', security: sec, parameters: [idParam], requestBody: { required: true, content: json({ type: 'object', required: ['cantidad'], properties: { cantidad: { type: 'integer', minimum: 1, example: 20 } } }) }, responses: { ...ok('Insumo actualizado', ref('Insumo'), '201'), ...errs('400', '401', '403', '404') } } },
     '/movimientos': { get: { tags: ['Inventario'], summary: 'Historial de movimientos (Administrador)', security: sec, responses: { ...ok('Movimientos', arr('Movimiento')), ...errs('401', '403') } } },

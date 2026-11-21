@@ -5,7 +5,12 @@ export interface Producto { id: string; nombre: string; categoria: string; preci
 export interface Pedido {
   id: string; cliente: { nombre: string; telefono: string }; retiro: string; estado: Estado
   items: { productoId: string; nombre: string; cantidad: number; precio: number }[]
-  total: number; mensajeTarjeta: string; metodoPago: string
+  total: number; mensajeTarjeta: string; metodoPago: string; facturaId?: string
+}
+export interface Factura {
+  id: string; pedidoId: string; fecha: string; cliente: { nombre: string; telefono: string }
+  items: { productoId: string; nombre: string; cantidad: number; precio: number }[]
+  total: number; metodoPago: string; emitidaPor: Usuario
 }
 export interface Movimiento { id: string; ref: string; tipo: 'entrada' | 'salida'; cantidad: number; fecha: string; pedidoId?: string }
 export interface Usuario { nombre: string; correo: string; rol: Rol }

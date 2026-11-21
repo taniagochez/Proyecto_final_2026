@@ -12,10 +12,18 @@ export interface Pedido {
   id: string; cliente: { nombre: string; telefono: string }; retiro: string; estado: Estado
   items: { productoId: string; nombre: string; cantidad: number; precio: number }[]
   total: number; mensajeTarjeta: string; metodoPago: string
+  facturaId?: string
+}
+export interface Factura {
+  id: string; pedidoId: string; fecha: string
+  cliente: { nombre: string; telefono: string }
+  items: { productoId: string; nombre: string; cantidad: number; precio: number }[]
+  total: number; metodoPago: string
+  emitidaPor: { nombre: string; correo: string; rol: Rol }
 }
 export interface Movimiento { id: string; ref: string; tipo: 'entrada' | 'salida'; cantidad: number; fecha: string; pedidoId?: string }
 export interface Usuario { nombre: string; correo: string; rol: Rol; passwordHash: string }
-interface Data { insumos: Insumo[]; productos: Producto[]; pedidos: Pedido[]; movimientos: Movimiento[]; usuarios: Usuario[] }
+interface Data { insumos: Insumo[]; productos: Producto[]; pedidos: Pedido[]; facturas: Factura[]; movimientos: Movimiento[]; usuarios: Usuario[] }
 
 const R = (insumoId: string, cantidad: number) => ({ insumoId, cantidad })
 const seed = (): Data => ({
@@ -44,6 +52,7 @@ const seed = (): Data => ({
     { id: 'p12', nombre: 'Gran Cumpleaños', categoria: 'Cumpleaños', precio: 25, stock: 5, icono: '🌹', imagen: '/img/productos/Ramo Rosas Liston.jpeg', descripcion: 'Perfecto Ramo para cumpleaños.', receta: [R('i1', 30), R('i3', 18), R('i4', 5)] },
   ],
   pedidos: [],
+  facturas: [],
   movimientos: [],
   usuarios: [
     { nombre: 'Administrador', correo: 'admin@hi.com', rol: 'Administrador', passwordHash: bcrypt.hashSync('admin123', 8) },
@@ -54,6 +63,7 @@ const seed = (): Data => ({
 
 const FILE = path.join(__dirname, '..', 'data.json')
 export const db: Data = fs.existsSync(FILE) ? JSON.parse(fs.readFileSync(FILE, 'utf8')) : seed()
+if (!db.facturas) db.facturas = [] // Migración: data.json anterior sin facturas
 // Migración: agrega usuarios nuevos al data.json existente sin borrar datos
 for (const u of seed().usuarios) if (!db.usuarios.some((x) => x.correo === u.correo)) db.usuarios.push(u)
 const base = seed()

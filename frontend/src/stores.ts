@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api, errMsg } from './services/api'
-import type { Estado, Insumo, Movimiento, Pedido, Producto, Usuario } from './types'
+import type { Estado, Factura, Insumo, Movimiento, Pedido, Producto, Usuario } from './types'
 
 export const useInventory = defineStore('inventory', () => {
   const productos = ref<Producto[]>([])
@@ -72,6 +72,20 @@ export const useOrders = defineStore('orders', () => {
       return { ok: true as const, id: data.id as string }
     } catch (e) { return { ok: false as const, error: errMsg(e) } }
   }
-  async function cambiar(p: Pedido, estado: Estado) { await api.patch(`/pedidos/${p.id}/estado`, { estado }); p.estado = estado }
-  return { pedidos, cargar, crear, cambiar }
+  async function cambiar(p: Pedido, estado: Estado) {
+    try { await api.patch(`/pedidos/${p.id}/estado`, { estado }); p.estado = estado; return { ok: true as const } }
+    catch (e) { return { ok: false as const, error: errMsg(e) } }
+  }
+  async function facturar(p: Pedido) {
+    try {
+      const { data } = await api.post<Factura>(`/pedidos/${p.id}/factura`)
+      p.facturaId = data.id
+      return { ok: true as const, factura: data }
+    } catch (e) { return { ok: false as const, error: errMsg(e) } }
+  }
+  async function verFactura(id: string) {
+    try { return { ok: true as const, factura: (await api.get<Factura>(`/facturas/${id}`)).data } }
+    catch (e) { return { ok: false as const, error: errMsg(e) } }
+  }
+  return { pedidos, cargar, crear, cambiar, facturar, verFactura }
 })

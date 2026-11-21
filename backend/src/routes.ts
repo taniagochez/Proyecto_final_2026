@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { db, disponible, ESTADOS, Estado, persist, Rol, uid } from './db'
+import { db, disponible, ESTADOS, Estado, Factura, persist, Rol, uid } from './db'
 import chat from './chat'
 
 const SECRET = process.env.JWT_SECRET || 'hi-gochez-dev-secret'
@@ -13,8 +13,9 @@ const auth = (...roles: Rol[]) => (req: Request, res: Response, next: NextFuncti
   const h = req.headers.authorization
   if (!h?.startsWith('Bearer ')) return void res.status(401).json({ error: 'No autenticado' })
   try {
-    const u = jwt.verify(h.slice(7), SECRET) as { rol: Rol }
+    const u = jwt.verify(h.slice(7), SECRET) as { nombre: string; correo: string; rol: Rol }
     if (roles.length && !roles.includes(u.rol)) return void res.status(403).json({ error: 'Sin permisos' })
+    res.locals.user = { nombre: u.nombre, correo: u.correo, rol: u.rol }
     next()
   } catch { res.status(401).json({ error: 'Token inválido o vencido' }) }
 }
@@ -97,8 +98,32 @@ r.patch('/pedidos/:id/estado', auth(...STAFF), (req, res) => {
   const p = db.pedidos.find((x) => x.id === req.params.id)
   if (!p) return void res.status(404).json({ error: 'Pedido no encontrado' })
   if (!ESTADOS.includes(req.body?.estado)) return void res.status(400).json({ error: 'Estado inválido' })
+  if (p.facturaId && req.body.estado !== p.estado) return void res.status(409).json({ error: `El pedido ya fue facturado (${p.facturaId}); no se puede cambiar su estado` })
   p.estado = req.body.estado as Estado; persist()
   res.json(p)
+})
+
+// ---- Facturación: solo Administrador/Encargado y solo sobre pedidos ya realizados (entregados) ----
+const ESTADO_FACTURABLE: Estado = 'Entregado'
+
+r.post('/pedidos/:id/factura', auth(...STAFF), (req, res) => {
+  const p = db.pedidos.find((x) => x.id === req.params.id)
+  if (!p) return void res.status(404).json({ error: 'Pedido no encontrado' })
+  if (p.estado !== ESTADO_FACTURABLE) return void res.status(409).json({ error: `Solo se pueden facturar pedidos en estado "${ESTADO_FACTURABLE}" (estado actual: ${p.estado})` })
+  if (p.facturaId) return void res.status(409).json({ error: `El pedido ya tiene la factura ${p.facturaId}` })
+  const f: Factura = {
+    id: 'F-' + String(db.facturas.length + 1).padStart(4, '0'), pedidoId: p.id, fecha: new Date().toISOString(),
+    cliente: { ...p.cliente }, items: p.items.map((i) => ({ ...i })), total: p.total, metodoPago: p.metodoPago,
+    emitidaPor: res.locals.user
+  }
+  db.facturas.push(f); p.facturaId = f.id; persist()
+  res.status(201).json(f)
+})
+r.get('/facturas', auth(...STAFF), (_q, res) => res.json([...db.facturas].reverse()))
+r.get('/facturas/:id', auth(...STAFF), (req, res) => {
+  const f = db.facturas.find((x) => x.id === req.params.id)
+  if (!f) return void res.status(404).json({ error: 'Factura no encontrada' })
+  res.json(f)
 })
 
 r.get('/dashboard', auth(...ADMIN), (_q, res) => {
