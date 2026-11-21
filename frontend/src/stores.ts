@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api, errMsg } from './services/api'
-import type { Estado, Factura, Insumo, Movimiento, Pedido, Producto, Usuario } from './types'
+import type { Estado, Insumo, Movimiento, Pedido, Producto, Usuario } from './types'
 
 export const useInventory = defineStore('inventory', () => {
   const productos = ref<Producto[]>([])
@@ -48,16 +48,46 @@ export const useCart = defineStore('cart', () => {
 
 export const useAuth = defineStore('auth', () => {
   const user = ref<Usuario | null>(JSON.parse(localStorage.getItem('hg_user') || 'null'))
+  const guardarSesion = (data: { user: Usuario; token: string }) => {
+    user.value = data.user
+    localStorage.setItem('hg_user', JSON.stringify(data.user)); localStorage.setItem('hg_token', data.token)
+  }
   async function login(correo: string, password: string) {
     try {
       const { data } = await api.post('/auth/login', { correo, password })
-      user.value = data.user
-      localStorage.setItem('hg_user', JSON.stringify(data.user)); localStorage.setItem('hg_token', data.token)
+      guardarSesion(data)
       return true
     } catch { return false }
   }
+  /** Crea una cuenta de Cliente y deja la sesión iniciada. */
+  async function register(nombre: string, correo: string, password: string) {
+    try {
+      const { data } = await api.post('/auth/register', { nombre, correo, password })
+      guardarSesion(data)
+      return { ok: true as const }
+    } catch (e) { return { ok: false as const, error: errMsg(e) } }
+  }
   function logout() { user.value = null; localStorage.removeItem('hg_user'); localStorage.removeItem('hg_token') }
-  return { user, login, logout }
+  return { user, login, register, logout }
+})
+
+/** Gestión de usuarios (solo Administrador): lista y crea/elimina encargados. */
+export const useUsuarios = defineStore('usuarios', () => {
+  const lista = ref<Usuario[]>([])
+  const cargar = async () => { lista.value = (await api.get('/usuarios')).data }
+  async function crearEncargado(nombre: string, correo: string, password: string) {
+    try { await api.post('/usuarios', { nombre, correo, password }); await cargar(); return { ok: true as const } }
+    catch (e) { return { ok: false as const, error: errMsg(e) } }
+  }
+  async function editarEncargado(correo: string, cambios: { nombre?: string; password?: string }) {
+    try { await api.patch(`/usuarios/${encodeURIComponent(correo)}`, cambios); await cargar(); return { ok: true as const } }
+    catch (e) { return { ok: false as const, error: errMsg(e) } }
+  }
+  async function eliminar(correo: string) {
+    try { await api.delete(`/usuarios/${encodeURIComponent(correo)}`); await cargar(); return { ok: true as const } }
+    catch (e) { return { ok: false as const, error: errMsg(e) } }
+  }
+  return { lista, cargar, crearEncargado, editarEncargado, eliminar }
 })
 
 export const useOrders = defineStore('orders', () => {
@@ -72,20 +102,6 @@ export const useOrders = defineStore('orders', () => {
       return { ok: true as const, id: data.id as string }
     } catch (e) { return { ok: false as const, error: errMsg(e) } }
   }
-  async function cambiar(p: Pedido, estado: Estado) {
-    try { await api.patch(`/pedidos/${p.id}/estado`, { estado }); p.estado = estado; return { ok: true as const } }
-    catch (e) { return { ok: false as const, error: errMsg(e) } }
-  }
-  async function facturar(p: Pedido) {
-    try {
-      const { data } = await api.post<Factura>(`/pedidos/${p.id}/factura`)
-      p.facturaId = data.id
-      return { ok: true as const, factura: data }
-    } catch (e) { return { ok: false as const, error: errMsg(e) } }
-  }
-  async function verFactura(id: string) {
-    try { return { ok: true as const, factura: (await api.get<Factura>(`/facturas/${id}`)).data } }
-    catch (e) { return { ok: false as const, error: errMsg(e) } }
-  }
-  return { pedidos, cargar, crear, cambiar, facturar, verFactura }
+  async function cambiar(p: Pedido, estado: Estado) { await api.patch(`/pedidos/${p.id}/estado`, { estado }); p.estado = estado }
+  return { pedidos, cargar, crear, cambiar }
 })

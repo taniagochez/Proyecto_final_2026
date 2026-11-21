@@ -8,7 +8,7 @@ import ChatWidget from './components/ChatWidget.vue'
 const auth = useAuth(), cart = useCart(), router = useRouter()
 const drawer = ref(false)
 const money = (n: number) => `$${n.toFixed(2)}`
-const salir = () => { auth.logout(); router.push('/') }
+const salir = () => { auth.logout(); cart.vaciar(); router.push('/') }
 // Distintivo del tipo de sesión, junto al carrito
 const badge = { Administrador: { c: 'secondary', i: mdiShieldAccount }, Encargado: { c: 'warning', i: mdiAccountCog }, Cliente: { c: 'info', i: mdiAccount } } as const
 const irCheckout = () => { drawer.value = false; router.push('/checkout') }
@@ -25,11 +25,15 @@ const irCheckout = () => { drawer.value = false; router.push('/checkout') }
         <v-btn v-if="auth.user.rol !== 'Cliente'" to="/pedidos" variant="text">Pedidos</v-btn>
         <template v-if="auth.user.rol === 'Administrador'">
           <v-btn to="/inventario" variant="text">Inventario</v-btn>
+          <v-btn to="/usuarios" variant="text">Usuarios</v-btn>
           <v-btn to="/dashboard" variant="text">Dashboard</v-btn>
         </template>
         <v-btn :prepend-icon="mdiLogout" variant="text" @click="salir">Salir</v-btn>
       </template>
-      <v-btn v-else to="/login" variant="text">Ingresar</v-btn>
+      <template v-else>
+        <v-btn to="/login" variant="text">Ingresar</v-btn>
+        <v-btn to="/registro" variant="text">Registrarse</v-btn>
+      </template>
       <v-btn icon variant="text" @click="drawer = true">
         <v-badge :content="cart.count" :model-value="cart.count > 0" color="secondary"><v-icon :icon="mdiCartOutline" /></v-badge>
       </v-btn>

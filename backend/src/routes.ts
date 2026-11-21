@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { db, disponible, ESTADOS, Estado, Factura, persist, Rol, uid } from './db'
+import { db, disponible, ESTADOS, Estado, persist, Rol, uid, Usuario } from './db'
 import chat from './chat'
 
 const SECRET = process.env.JWT_SECRET || 'hi-gochez-dev-secret'
@@ -13,9 +13,10 @@ const auth = (...roles: Rol[]) => (req: Request, res: Response, next: NextFuncti
   const h = req.headers.authorization
   if (!h?.startsWith('Bearer ')) return void res.status(401).json({ error: 'No autenticado' })
   try {
-    const u = jwt.verify(h.slice(7), SECRET) as { nombre: string; correo: string; rol: Rol }
+    const u = jwt.verify(h.slice(7), SECRET) as { rol: Rol; correo: string }
+    // Si el usuario fue eliminado, su token deja de servir aunque no haya vencido
+    if (!db.usuarios.some((x) => x.correo === u.correo)) return void res.status(401).json({ error: 'Usuario ya no existe' })
     if (roles.length && !roles.includes(u.rol)) return void res.status(403).json({ error: 'Sin permisos' })
-    res.locals.user = { nombre: u.nombre, correo: u.correo, rol: u.rol }
     next()
   } catch { res.status(401).json({ error: 'Token inválido o vencido' }) }
 }
@@ -25,10 +26,74 @@ const mov = (ref: string, tipo: 'entrada' | 'salida', cantidad: number, pedidoId
 
 r.post('/auth/login', (req, res) => {
   const { correo, password } = req.body ?? {}
-  const u = db.usuarios.find((x) => x.correo === String(correo ?? '').trim())
+  const u = db.usuarios.find((x) => x.correo.toLowerCase() === String(correo ?? '').trim().toLowerCase())
   if (!u || !bcrypt.compareSync(String(password ?? ''), u.passwordHash)) return void res.status(401).json({ error: 'Credenciales incorrectas' })
   const user = { nombre: u.nombre, correo: u.correo, rol: u.rol }
   res.json({ token: jwt.sign(user, SECRET, { expiresIn: '8h' }), user })
+})
+
+// ---------- Registro de clientes y gestión de usuarios ----------
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+type Datos = { nombre: string; correo: string; password: string }
+/** Valida nombre, correo y contraseña. Devuelve el mensaje de error o los datos limpios. */
+function validarDatos(body: any): { error: string } | Datos {
+  const nombre = String(body?.nombre ?? '').trim()
+  const correo = String(body?.correo ?? '').trim().toLowerCase()
+  const password = String(body?.password ?? '')
+  if (nombre.length < 2 || nombre.length > 60) return { error: 'El nombre debe tener entre 2 y 60 caracteres' }
+  if (!EMAIL_RE.test(correo) || correo.length > 100) return { error: 'Correo inválido' }
+  if (password.length < 6 || password.length > 100) return { error: 'La contraseña debe tener al menos 6 caracteres' }
+  if (db.usuarios.some((u) => u.correo.toLowerCase() === correo)) return { error: 'Ya existe una cuenta con ese correo' }
+  return { nombre, correo, password }
+}
+const crearUsuario = (d: Datos, rol: Rol): Usuario => {
+  const u: Usuario = { nombre: d.nombre, correo: d.correo, rol, passwordHash: bcrypt.hashSync(d.password, 8) }
+  db.usuarios.push(u); persist()
+  return u
+}
+const publico = (u: Usuario) => ({ nombre: u.nombre, correo: u.correo, rol: u.rol })
+
+// Registro público: SIEMPRE crea un Cliente (el rol nunca viene del navegador)
+r.post('/auth/register', (req, res) => {
+  const d = validarDatos(req.body)
+  if ('error' in d) return void res.status(400).json({ error: d.error })
+  const user = publico(crearUsuario(d, 'Cliente'))
+  res.status(201).json({ token: jwt.sign(user, SECRET, { expiresIn: '8h' }), user })
+})
+
+// Administrador: lista de usuarios (sin contraseñas)
+r.get('/usuarios', auth(...ADMIN), (_q, res) => res.json(db.usuarios.map(publico)))
+
+// Administrador: crear un Encargado
+r.post('/usuarios', auth(...ADMIN), (req, res) => {
+  const d = validarDatos(req.body)
+  if ('error' in d) return void res.status(400).json({ error: d.error })
+  res.status(201).json(publico(crearUsuario(d, 'Encargado')))
+})
+
+// Administrador: editar un Encargado (nombre y/o nueva contraseña, p. ej. si la olvidó)
+r.patch('/usuarios/:correo', auth(...ADMIN), (req, res) => {
+  const u = db.usuarios.find((x) => x.correo.toLowerCase() === req.params.correo.toLowerCase())
+  if (!u) return void res.status(404).json({ error: 'Usuario no encontrado' })
+  if (u.rol !== 'Encargado') return void res.status(403).json({ error: 'Solo se pueden editar encargados' })
+  const nombre = req.body?.nombre === undefined ? undefined : String(req.body.nombre).trim()
+  const password = req.body?.password ? String(req.body.password) : undefined
+  if (nombre === undefined && !password) return void res.status(400).json({ error: 'No hay cambios que guardar' })
+  if (nombre !== undefined && (nombre.length < 2 || nombre.length > 60)) return void res.status(400).json({ error: 'El nombre debe tener entre 2 y 60 caracteres' })
+  if (password && (password.length < 6 || password.length > 100)) return void res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' })
+  if (nombre !== undefined) u.nombre = nombre
+  if (password) u.passwordHash = bcrypt.hashSync(password, 8)
+  persist()
+  res.json(publico(u))
+})
+
+// Administrador: eliminar un Encargado (no se pueden eliminar administradores ni clientes)
+r.delete('/usuarios/:correo', auth(...ADMIN), (req, res) => {
+  const i = db.usuarios.findIndex((u) => u.correo.toLowerCase() === req.params.correo.toLowerCase())
+  if (i < 0) return void res.status(404).json({ error: 'Usuario no encontrado' })
+  if (db.usuarios[i].rol !== 'Encargado') return void res.status(403).json({ error: 'Solo se pueden eliminar encargados' })
+  db.usuarios.splice(i, 1); persist()
+  res.status(204).end()
 })
 
 r.get('/productos', (req, res) => {
@@ -98,32 +163,8 @@ r.patch('/pedidos/:id/estado', auth(...STAFF), (req, res) => {
   const p = db.pedidos.find((x) => x.id === req.params.id)
   if (!p) return void res.status(404).json({ error: 'Pedido no encontrado' })
   if (!ESTADOS.includes(req.body?.estado)) return void res.status(400).json({ error: 'Estado inválido' })
-  if (p.facturaId && req.body.estado !== p.estado) return void res.status(409).json({ error: `El pedido ya fue facturado (${p.facturaId}); no se puede cambiar su estado` })
   p.estado = req.body.estado as Estado; persist()
   res.json(p)
-})
-
-// ---- Facturación: solo Administrador/Encargado y solo sobre pedidos ya realizados (entregados) ----
-const ESTADO_FACTURABLE: Estado = 'Entregado'
-
-r.post('/pedidos/:id/factura', auth(...STAFF), (req, res) => {
-  const p = db.pedidos.find((x) => x.id === req.params.id)
-  if (!p) return void res.status(404).json({ error: 'Pedido no encontrado' })
-  if (p.estado !== ESTADO_FACTURABLE) return void res.status(409).json({ error: `Solo se pueden facturar pedidos en estado "${ESTADO_FACTURABLE}" (estado actual: ${p.estado})` })
-  if (p.facturaId) return void res.status(409).json({ error: `El pedido ya tiene la factura ${p.facturaId}` })
-  const f: Factura = {
-    id: 'F-' + String(db.facturas.length + 1).padStart(4, '0'), pedidoId: p.id, fecha: new Date().toISOString(),
-    cliente: { ...p.cliente }, items: p.items.map((i) => ({ ...i })), total: p.total, metodoPago: p.metodoPago,
-    emitidaPor: res.locals.user
-  }
-  db.facturas.push(f); p.facturaId = f.id; persist()
-  res.status(201).json(f)
-})
-r.get('/facturas', auth(...STAFF), (_q, res) => res.json([...db.facturas].reverse()))
-r.get('/facturas/:id', auth(...STAFF), (req, res) => {
-  const f = db.facturas.find((x) => x.id === req.params.id)
-  if (!f) return void res.status(404).json({ error: 'Factura no encontrada' })
-  res.json(f)
 })
 
 r.get('/dashboard', auth(...ADMIN), (_q, res) => {

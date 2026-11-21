@@ -35,6 +35,6 @@ const entrar = async (ev: Event) => {
       <v-alert v-if="error" type="error" variant="flat" class="mb-3">{{ error }}</v-alert>
       <v-btn block color="primary" type="submit" :loading="cargando" :disabled="cargando">Ingresar</v-btn>
     </form>
-    <div class="text-caption mt-4 text-medium-emphasis">Demo:<br>Administrador: admin@hi.com / admin123<br>Encargado: encargado@hi.com / encargado123<br>Cliente: cliente@hi.com / cliente123</div>
+    <div class="text-body-2 mt-4 text-center">¿No tienes cuenta? <router-link to="/registro">Regístrate</router-link></div>
   </v-card>
 </template>
