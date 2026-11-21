@@ -4,11 +4,13 @@ import axios from 'axios'
 export const api = axios.create({ baseURL: '/api' })
 api.interceptors.request.use((c) => {
   const t = localStorage.getItem('hg_token')
-  if (t) c.headers.Authorization = `Bearer ${t}`
+  if (t && !String(c.url ?? '').includes('/auth/login')) c.headers.Authorization = `Bearer ${t}`
   return c
 })
 api.interceptors.response.use((r) => r, (e) => {
-  if (e.response?.status === 401 && localStorage.getItem('hg_token')) {
+  // Un 401 al iniciar sesión es "credenciales incorrectas": no debe borrar la sesión ni redirigir.
+  const esLogin = String(e.config?.url ?? '').includes('/auth/login')
+  if (e.response?.status === 401 && !esLogin && localStorage.getItem('hg_token')) {
     localStorage.removeItem('hg_token'); localStorage.removeItem('hg_user'); location.hash = '#/login'
   }
   return Promise.reject(e)

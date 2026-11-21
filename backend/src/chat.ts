@@ -81,12 +81,14 @@ async function llamarModelo(system: string, messages: Msg[]): Promise<string> {
     const resp = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${orKey}`, 'X-Title': 'Yli Gochez Floristeria' },
-      body: JSON.stringify({ model: OPENROUTER_MODEL, max_tokens: 800, messages: [{ role: 'system', content: system }, ...messages] }),
+      body: JSON.stringify({ model: OPENROUTER_MODEL, max_tokens: 1500, messages: [{ role: 'system', content: system }, ...messages] }),
       signal: AbortSignal.timeout(45_000)
     })
     if (!resp.ok) throw new Error(`OpenRouter ${resp.status}: ${await resp.text().catch(() => '')}`)
-    const data = (await resp.json()) as { choices?: { message?: { content?: string | null } }[] }
-    return data.choices?.[0]?.message?.content ?? ''
+    const data = (await resp.json()) as { choices?: { finish_reason?: string; message?: { content?: string | null } }[] }
+    const texto = data.choices?.[0]?.message?.content ?? ''
+    if (!texto.trim()) console.warn('[chat] OpenRouter devolvió respuesta vacía. finish_reason =', data.choices?.[0]?.finish_reason)
+    return texto
   }
   const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -95,19 +97,26 @@ async function llamarModelo(system: string, messages: Msg[]): Promise<string> {
     signal: AbortSignal.timeout(30_000)
   })
   if (!resp.ok) throw new Error(`Anthropic ${resp.status}: ${await resp.text().catch(() => '')}`)
-  const data = (await resp.json()) as { content?: { type: string; text?: string }[] }
-  return (data.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('')
+  const data = (await resp.json()) as { stop_reason?: string; content?: { type: string; text?: string }[] }
+  const texto = (data.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('')
+  if (!texto.trim()) console.warn('[chat] Anthropic devolvió respuesta vacía. stop_reason =', data.stop_reason)
+  return texto
 }
 
-/** Los modelos gratuitos de OpenRouter fallan seguido (límites, saturación): se reintenta una vez. */
+/** Los modelos gratuitos fallan seguido (límites, saturación, respuestas vacías): se reintenta una vez. */
+const limpiarPensamiento = (t: string) => t.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+
 async function conReintento(system: string, messages: Msg[]): Promise<string> {
-  try { return await llamarModelo(system, messages) }
-  catch (e) {
+  try {
+    const t = await llamarModelo(system, messages)
+    if (limpiarPensamiento(t)) return t
+    console.warn('[chat] Respuesta vacía, reintentando...')
+  } catch (e) {
     if (!process.env.OPENROUTER_API_KEY) throw e
     console.warn('[chat] Reintentando tras error:', String(e).slice(0, 200))
-    await new Promise((ok) => setTimeout(ok, 1200))
-    return llamarModelo(system, messages)
   }
+  await new Promise((ok) => setTimeout(ok, 1200))
+  return llamarModelo(system, messages)
 }
 
 const r = Router()
