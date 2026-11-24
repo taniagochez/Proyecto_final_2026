@@ -41,6 +41,7 @@ Extensión recomendada: **Vue - Official (Volar)**.
 | Método | Ruta | Acceso |
 |---|---|---|
 | POST | `/api/auth/login` | Público |
+| POST | `/api/auth/register` | Público — crea una cuenta de Cliente e inicia sesión |
 | GET | `/api/productos` | Público |
 | POST | `/api/pedidos` | Público (descuenta producto + insumos) |
 | GET | `/api/pedidos` | Administrador / Encargado |
@@ -49,6 +50,16 @@ Extensión recomendada: **Vue - Official (Volar)**.
 | POST | `/api/insumos/{id}/entradas` | Administrador |
 | POST | `/api/pedidos/{id}/factura` | Administrador / Encargado — solo pedidos en estado *Entregado*, una factura por pedido |
 | GET | `/api/facturas`, `/api/facturas/{id}` | Administrador / Encargado |
+| GET | `/api/productos/{id}/calificaciones` | Público (con token incluye la calificación propia) |
+| POST | `/api/productos/{id}/calificaciones` | Cliente — 1 a 5 estrellas + comentario; una por cliente y ramo (volver a calificar la reemplaza) |
+| GET | `/api/pedidos/disponibilidad?fecha=AAAA-MM-DD` | Público — pedidos por hora del día |
+| GET | `/api/dashboard/analitica?anio=&mes=` | Administrador — más vendidos, clientes y fechas importantes |
+
+## Reglas de pedidos y reportes
+- **Máximo 3 pedidos por hora** de retiro (los cancelados no cuentan). Las horas llenas y las que ya pasaron aparecen bloqueadas en el formulario, y el servidor lo valida también (409).
+- **Dashboard → analítica:** más vendido anual y mensual, cliente que más y que menos compra (se identifica por teléfono) y ventas en fechas importantes. Cuenta pedidos no cancelados según su **fecha de retiro**.
+- Las fechas importantes y su ventana (±1 día) se ajustan en `backend/src/analitica.ts` (`FECHAS_IMPORTANTES`, `VENTANA_DIAS`).
+- Para ver los gráficos con datos de ejemplo: detén el servidor y ejecuta `npm run demo-data` en `backend/` (agrega pedidos `D-xxxx` de 2025–2026 y calificaciones; no toca el inventario).
 
 ## Notas
 - Persistencia: archivo `backend/data.json` (se crea solo con datos de ejemplo; bórralo para reiniciar).

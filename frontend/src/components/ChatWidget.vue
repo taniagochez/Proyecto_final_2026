@@ -2,12 +2,12 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { mdiCartPlus, mdiChatProcessingOutline, mdiClose, mdiDeleteOutline, mdiFlower, mdiSend } from '@mdi/js'
 import { api, errMsg } from '../services/api'
-import { useAuth, useCart, useInventory } from '../stores'
+import { useCart, useInventory } from '../stores'
 import type { Producto } from '../types'
 
 interface Msg { role: 'user' | 'assistant'; content: string; productos?: string[]; error?: boolean }
 
-const inv = useInventory(), cart = useCart(), auth = useAuth()
+const inv = useInventory(), cart = useCart()
 const SALUDO: Msg = { role: 'assistant', content: '¡Hola! Soy Flor 🌸, la asistente de Yli Gochez. Cuéntame para qué ocasión buscas flores o pregúntame lo que necesites sobre la tienda.' }
 const SUGERENCIAS = ['Busco un regalo de aniversario', 'Algo bonito por menos de $25', '¿Cómo funciona el retiro?', '¿Cómo cuido mis flores?']
 
@@ -19,8 +19,6 @@ const soloSaludo = computed(() => mensajes.value.length === 1)
 const bajar = () => nextTick(() => { if (caja.value) caja.value.scrollTop = caja.value.scrollHeight })
 watch(mensajes, () => { sessionStorage.setItem('hg_chat', JSON.stringify(mensajes.value)); bajar() }, { deep: true })
 watch(abierto, (v) => v && bajar())
-// Cada sesión (o visitante sin sesión) empieza con una conversación nueva: no se heredan chats de otra cuenta
-watch(() => auth.user?.correo, () => { mensajes.value = [SALUDO] })
 watch(cargando, bajar)
 
 const producto = (id: string): Producto | undefined => inv.productos.find((p) => p.id === id)

@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { mdiCartPlus, mdiFlower } from '@mdi/js'
+import { mdiCartPlus, mdiFlower, mdiStarOutline } from '@mdi/js'
 import { useCart, useInventory } from '../stores'
 import type { Producto } from '../types'
+import Resenas from '../components/Resenas.vue'
 
 const inv = useInventory(), cart = useCart()
 const cat = ref('Todos'), aviso = ref(false), texto = ref('')
+const calificando = ref<Producto | null>(null), dialogo = ref(false)
+const calificar = (p: Producto) => { calificando.value = p; dialogo.value = true }
 const cats = computed(() => ['Todos', ...new Set(inv.productos.map((p) => p.categoria))])
 const lista = computed(() => inv.productos.filter((p) => cat.value === 'Todos' || p.categoria === cat.value))
 const agregar = (p: Producto) => {
@@ -26,6 +29,10 @@ const agregar = (p: Producto) => {
        <v-img v-if="p.imagen" :src="p.imagen" :alt="p.nombre" height="180" cover />
         <v-sheet v-else color="surface-variant" class="d-flex align-center justify-center" height="180" style="font-size: 64px">{{ p.icono }}</v-sheet>
         <v-card-title>{{ p.nombre }}</v-card-title>
+        <div class="px-4 d-flex align-center ga-1 cursor-pointer" role="button" :aria-label="`Ver calificaciones de ${p.nombre}`" @click="calificar(p)">
+          <v-rating :model-value="p.promedio" readonly half-increments density="compact" size="small" color="amber-darken-2" active-color="amber-darken-2" />
+          <span class="text-caption">{{ p.totalCalificaciones ? `${p.promedio.toFixed(1)} (${p.totalCalificaciones})` : 'Sin calificaciones' }}</span>
+        </div>
         <v-card-text class="flex-grow-1">
           {{ p.descripcion }}
           <div class="mt-3 d-flex ga-2 align-center">
@@ -37,10 +44,12 @@ const agregar = (p: Producto) => {
         </v-card-text>
         <v-card-actions class="px-4 pb-4">
           <span class="text-h6">${{ p.precio.toFixed(2) }}</span><v-spacer />
+          <v-btn variant="text" :prepend-icon="mdiStarOutline" @click="calificar(p)">Calificar</v-btn>
           <v-btn color="primary" :prepend-icon="mdiCartPlus" :disabled="!p.disponible" @click="agregar(p)">Agregar</v-btn>
         </v-card-actions>
       </v-card>
     </v-col>
   </v-row>
+  <Resenas v-model="dialogo" :producto="calificando" @cambio="inv.cargarProductos()" />
   <v-snackbar v-model="aviso" color="secondary" timeout="2000">{{ texto }}</v-snackbar>
 </template>

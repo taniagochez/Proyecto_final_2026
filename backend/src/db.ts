@@ -13,6 +13,11 @@ export interface Pedido {
   items: { productoId: string; nombre: string; cantidad: number; precio: number }[]
   total: number; mensajeTarjeta: string; metodoPago: string
   facturaId?: string
+  creado?: string // ISO; los pedidos anteriores a esta versión no lo tienen
+}
+export interface Calificacion {
+  id: string; productoId: string; correo: string; nombre: string
+  estrellas: number; comentario: string; fecha: string
 }
 export interface Factura {
   id: string; pedidoId: string; fecha: string
@@ -23,7 +28,7 @@ export interface Factura {
 }
 export interface Movimiento { id: string; ref: string; tipo: 'entrada' | 'salida'; cantidad: number; fecha: string; pedidoId?: string }
 export interface Usuario { nombre: string; correo: string; rol: Rol; passwordHash: string }
-interface Data { insumos: Insumo[]; productos: Producto[]; pedidos: Pedido[]; facturas: Factura[]; movimientos: Movimiento[]; usuarios: Usuario[] }
+interface Data { insumos: Insumo[]; productos: Producto[]; pedidos: Pedido[]; facturas: Factura[]; movimientos: Movimiento[]; usuarios: Usuario[]; calificaciones: Calificacion[] }
 
 const R = (insumoId: string, cantidad: number) => ({ insumoId, cantidad })
 const seed = (): Data => ({
@@ -54,6 +59,7 @@ const seed = (): Data => ({
   pedidos: [],
   facturas: [],
   movimientos: [],
+  calificaciones: [],
   usuarios: [
     { nombre: 'Administrador', correo: 'admin@hi.com', rol: 'Administrador', passwordHash: bcrypt.hashSync('admin123', 8) },
     { nombre: 'Encargado de pedidos', correo: 'encargado@hi.com', rol: 'Encargado', passwordHash: bcrypt.hashSync('encargado123', 8) },
@@ -64,6 +70,7 @@ const seed = (): Data => ({
 const FILE = path.join(__dirname, '..', 'data.json')
 export const db: Data = fs.existsSync(FILE) ? JSON.parse(fs.readFileSync(FILE, 'utf8')) : seed()
 if (!db.facturas) db.facturas = [] // Migración: data.json anterior sin facturas
+if (!db.calificaciones) db.calificaciones = [] // Migración: data.json anterior sin calificaciones
 // Migración: agrega usuarios nuevos al data.json existente sin borrar datos
 for (const u of seed().usuarios) if (!db.usuarios.some((x) => x.correo === u.correo)) db.usuarios.push(u)
 const base = seed()

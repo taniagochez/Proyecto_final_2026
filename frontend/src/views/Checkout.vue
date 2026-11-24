@@ -1,18 +1,61 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { mdiCheckCircle } from '@mdi/js'
 import { useAuth, useCart, useOrders } from '../stores'
 
 const cart = useCart(), orders = useOrders(), auth = useAuth()
-const step = ref(1), nombre = ref(auth.user?.rol === 'Cliente' ? auth.user.nombre : ''), tel = ref(''), fecha = ref(new Date()), hora = ref('10:00')
-const msg = ref(''), pago = ref('Efectivo al retirar'), error = ref(''), doneId = ref('')
+const step = ref(1), nombre = ref(auth.user?.rol === 'Cliente' ? auth.user.nombre : ''), tel = ref('')
+const msg = ref(''), pago = ref('Efectivo al retirar'), error = ref(''), errorHora = ref(''), doneId = ref('')
 const horas = Array.from({ length: 10 }, (_, i) => `${String(i + 9).padStart(2, '0')}:00`)
-const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
-const telOk = (v: string) => /^[\d\s+-]{8,}$/.test(v) || 'Teléfono inválido'
-const retiro = computed(() => {
-  const d = new Date(fecha.value); const [h, m] = hora.value.split(':').map(Number); d.setHours(h, m, 0, 0); return d
+
+// Reloj reactivo: cada 30 s se bloquean solas las horas que ya pasaron y se refresca la ocupación
+const ahora = ref(new Date())
+let reloj: ReturnType<typeof setInterval>
+onMounted(() => { reloj = setInterval(() => { ahora.value = new Date(); cargarOcupacion() }, 30_000) })
+onUnmounted(() => clearInterval(reloj))
+
+const inicioDia = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+const aFecha = (d: Date, h: string) => { const x = new Date(d); const [hh, mm] = h.split(':').map(Number); x.setHours(hh, mm, 0, 0); return x }
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// Una hora ya pasó si no es posterior al momento actual (a las 11:30 solo se puede desde las 12:00)
+const pasada = (d: Date, h: string) => aFecha(d, h).getTime() <= ahora.value.getTime()
+
+// Si ya no quedan horas hoy, el primer día permitido es mañana
+const minFecha = computed(() => {
+  const hoy = inicioDia(ahora.value)
+  if (horas.some((h) => !pasada(hoy, h))) return hoy
+  const m = new Date(hoy); m.setDate(m.getDate() + 1); return m
 })
-const futuro = computed(() => retiro.value.getTime() > Date.now())
+const fecha = ref<Date>(new Date(minFecha.value))
+const hora = ref('')
+
+// Máximo de pedidos por hora (lo define el servidor, por defecto 3)
+const ocupacion = ref<Record<string, { pedidos: number; lleno: boolean }>>({}), maxPorHora = ref(3)
+async function cargarOcupacion() {
+  const dia = ymd(fecha.value)
+  const r = await orders.disponibilidad(dia)
+  if (dia !== ymd(fecha.value)) return // el cliente cambió de día mientras llegaba la respuesta
+  ocupacion.value = r?.horas ?? {}; if (r) maxPorHora.value = r.max
+}
+const llena = (h: string) => !!ocupacion.value[h]?.lleno
+const libre = (d: Date, h: string) => !pasada(d, h) && !llena(h)
+
+const horasItems = computed(() => horas.map((h) => ({
+  title: h, value: h,
+  props: { disabled: !libre(fecha.value, h), subtitle: pasada(fecha.value, h) ? 'Hora pasada' : llena(h) ? `Lleno (${maxPorHora.value}/${maxPorHora.value} pedidos)` : undefined }
+})))
+const sinHoras = computed(() => !horas.some((h) => libre(fecha.value, h)))
+
+// Mantiene fecha y hora siempre válidas (también cuando pasa el tiempo con la pantalla abierta)
+watch([fecha, ahora, ocupacion], () => {
+  if (inicioDia(fecha.value) < minFecha.value) fecha.value = new Date(minFecha.value)
+  if (!hora.value || !libre(fecha.value, hora.value)) hora.value = horas.find((h) => libre(fecha.value, h)) ?? ''
+}, { immediate: true })
+watch(() => ymd(fecha.value), () => { errorHora.value = ''; cargarOcupacion() }, { immediate: true })
+
+const telOk = (v: string) => /^[\d\s+-]{8,}$/.test(v) || 'Teléfono inválido'
+const retiro = computed(() => aFecha(fecha.value, hora.value || '00:00'))
+const futuro = computed(() => !!hora.value && retiro.value.getTime() > ahora.value.getTime())
 const paso1 = computed(() => !!nombre.value.trim() && telOk(tel.value) === true)
 const fmt = (d: Date) => d.toLocaleString('es-SV', { dateStyle: 'full', timeStyle: 'short' })
 
@@ -21,7 +64,11 @@ async function confirmar() {
     cliente: { nombre: nombre.value.trim(), telefono: tel.value }, retiro: retiro.value.toISOString(),
     mensajeTarjeta: msg.value, metodoPago: pago.value, lineas: cart.lineas
   })
-  if (!r.ok) { error.value = r.error; return }
+  if (!r.ok) {
+    // Hora llena o ya pasada: se regresa al paso 2 para elegir otra, con la ocupación actualizada
+    if (/horario|hora|fecha de retiro/i.test(r.error)) { errorHora.value = r.error; step.value = 2; await cargarOcupacion(); return }
+    error.value = r.error; return
+  }
   doneId.value = r.id; cart.vaciar()
 }
 </script>
@@ -46,10 +93,11 @@ async function confirmar() {
     </template>
     <template #item.2>
       <v-row>
-        <v-col cols="12" md="6"><v-date-picker v-model="fecha" :min="hoy" hide-header color="primary" width="100%" /></v-col>
+        <v-col cols="12" md="6"><v-date-picker v-model="fecha" :min="minFecha" hide-header color="primary" width="100%" /></v-col>
         <v-col cols="12" md="6">
-          <v-select v-model="hora" :items="horas" label="Hora de retiro" />
-          <v-alert v-if="!futuro" type="warning" variant="flat">La fecha y hora deben ser posteriores a la actual.</v-alert>
+          <v-select v-model="hora" :items="horasItems" label="Hora de retiro" :disabled="sinHoras" hint="No se pueden elegir horas pasadas ni horas con 3 pedidos." persistent-hint />
+          <v-alert v-if="sinHoras" type="warning" variant="flat" class="mt-3">No quedan horas libres este día. Elige otra fecha.</v-alert>
+          <v-alert v-if="errorHora" type="error" variant="flat" class="mt-3">{{ errorHora }}</v-alert>
         </v-col>
       </v-row>
       <v-btn variant="text" @click="step = 1">Atrás</v-btn>
