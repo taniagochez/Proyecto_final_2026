@@ -1,7 +1,6 @@
-// Persistencia en archivo JSON (data.json). Para producción: migrar a PostgreSQL/MongoDB/Firebase.
-import fs from 'fs'
-import path from 'path'
+// Base de datos MongoDB. La conexión se configura en backend/.env (MONGODB_URI); nunca se escribe en el código.
 import bcrypt from 'bcryptjs'
+import { MongoClient } from 'mongodb'
 
 export type Rol = 'Administrador' | 'Encargado' | 'Cliente'
 export const ESTADOS = ['Pendiente', 'Listo para retiro', 'Entregado', 'Cancelado'] as const
@@ -67,23 +66,61 @@ const seed = (): Data => ({
   ]
 })
 
-const FILE = path.join(__dirname, '..', 'data.json')
-export const db: Data = fs.existsSync(FILE) ? JSON.parse(fs.readFileSync(FILE, 'utf8')) : seed()
-if (!db.facturas) db.facturas = [] // Migración: data.json anterior sin facturas
-if (!db.calificaciones) db.calificaciones = [] // Migración: data.json anterior sin calificaciones
-// Migración: agrega usuarios nuevos al data.json existente sin borrar datos
-for (const u of seed().usuarios) if (!db.usuarios.some((x) => x.correo === u.correo)) db.usuarios.push(u)
-const base = seed()
-for (const i of base.insumos) if (!db.insumos.some((x) => x.id === i.id)) db.insumos.push(i)
-for (const p of base.productos) {
-  const ex = db.productos.find((x) => x.id === p.id)
-  if (!ex) db.productos.push(p)
-  else { ex.imagen = p.imagen; ex.icono = p.icono; ex.descripcion = p.descripcion }
+
+// ---- Conexión ----
+const URI = process.env.MONGODB_URI
+const client = new MongoClient(URI || 'mongodb://127.0.0.1:27017', { serverSelectionTimeoutMS: 8000, ignoreUndefined: true })
+const bd = client.db(process.env.MONGODB_DB || 'yli_gochez')
+
+export const insumos = bd.collection<Insumo>('insumos')
+export const productos = bd.collection<Producto>('productos')
+export const pedidos = bd.collection<Pedido>('pedidos')
+export const facturas = bd.collection<Factura>('facturas')
+export const movimientos = bd.collection<Movimiento>('movimientos')
+export const usuarios = bd.collection<Usuario>('usuarios')
+export const calificaciones = bd.collection<Calificacion>('calificaciones')
+const contadores = bd.collection<{ _id: string; n: number }>('contadores') // numeración P-0001, F-0001 sin repetirse
+
+/** Opciones de consulta para no devolver el campo interno `_id` de Mongo. */
+export const sinId = { projection: { _id: 0 } } as const
+
+export async function conectarDB() {
+  if (!URI) throw new Error('Falta MONGODB_URI en backend/.env (copia backend/.env.example y completa la conexión)')
+  await client.connect()
+  await Promise.all([
+    insumos.createIndex({ id: 1 }, { unique: true }),
+    productos.createIndex({ id: 1 }, { unique: true }),
+    usuarios.createIndex({ correo: 1 }, { unique: true }),
+    pedidos.createIndex({ id: 1 }, { unique: true }),
+    pedidos.createIndex({ retiro: 1 }),
+    facturas.createIndex({ id: 1 }, { unique: true }),
+    facturas.createIndex({ pedidoId: 1 }, { unique: true }), // un pedido = una factura, garantizado por la base de datos
+    calificaciones.createIndex({ productoId: 1, correo: 1 }, { unique: true }), // una calificación por cliente y ramo
+    movimientos.createIndex({ fecha: -1 })
+  ])
 }
-export const persist = () => fs.writeFileSync(FILE, JSON.stringify(db, null, 2))
-persist()
+export const cerrarDB = () => client.close()
+
+/** Carga los datos iniciales que falten (usuarios, insumos y catálogo). No pisa stock ni contraseñas existentes. */
+export async function sembrar() {
+  const s = seed()
+  await usuarios.bulkWrite(s.usuarios.map((u) => ({ updateOne: { filter: { correo: u.correo }, update: { $setOnInsert: u }, upsert: true } })))
+  await insumos.bulkWrite(s.insumos.map((i) => ({ updateOne: { filter: { id: i.id }, update: { $setOnInsert: i }, upsert: true } })))
+  // Del catálogo se refrescan imagen, ícono y descripción (para que cambios en el código se reflejen); el stock no se toca
+  await productos.bulkWrite(s.productos.map(({ imagen, icono, descripcion, ...resto }) => ({
+    updateOne: { filter: { id: resto.id }, update: { $set: { imagen, icono, descripcion }, $setOnInsert: resto }, upsert: true }
+  })))
+}
+
+/** Siguiente número de una serie (atómico: dos pedidos simultáneos nunca reciben el mismo número). */
+export const siguiente = async (serie: string) =>
+  (await contadores.findOneAndUpdate({ _id: serie }, { $inc: { n: 1 } }, { upsert: true, returnDocument: 'after' }))!.n
+/** Asegura que la serie no baje de `n` (lo usa la migración desde data.json). */
+export const fijarContador = (serie: string, n: number) => contadores.updateOne({ _id: serie }, { $max: { n } }, { upsert: true })
+
 export const uid = () => Math.random().toString(36).slice(2, 10)
+export const normalizarCorreo = (c: unknown) => String(c ?? '').trim().toLowerCase()
 
 /** Unidades que realmente se pueden armar (limitado por stock terminado e insumos). */
-export const disponible = (p: Producto) =>
-  Math.max(0, Math.min(p.stock, ...p.receta.map((r) => Math.floor((db.insumos.find((i) => i.id === r.insumoId)?.stock ?? 0) / r.cantidad))))
+export const disponible = (p: Producto, ins: Insumo[]) =>
+  Math.max(0, Math.min(p.stock, ...p.receta.map((r) => Math.floor((ins.find((i) => i.id === r.insumoId)?.stock ?? 0) / r.cantidad))))

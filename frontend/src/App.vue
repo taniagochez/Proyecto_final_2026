@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { mdiFlower, mdiCartOutline, mdiMinus, mdiLogout, mdiStoreClock, mdiShieldAccount, mdiAccountCog, mdiAccount } from '@mdi/js'
+import { mdiFlower, mdiCartOutline, mdiMinus, mdiPlus, mdiLogout, mdiStoreClock, mdiShieldAccount, mdiAccountCog, mdiAccount } from '@mdi/js'
 import { useAuth, useCart } from './stores'
 import ChatWidget from './components/ChatWidget.vue'
 
@@ -39,7 +39,7 @@ const irCheckout = () => { drawer.value = false; router.push('/checkout') }
     </v-app-bar>
 
     <v-navigation-drawer v-model="drawer" location="right" temporary width="340">
-      <v-list-subheader class="mt-2">Tu carrito</v-list-subheader>
+      <v-list-subheader class="mt-2 px-4">Tu carrito</v-list-subheader>
       <v-list v-if="cart.lineas.length">
         <v-list-item v-for="l in cart.lineas" :key="l.p.id" :title="l.p.nombre" :subtitle="`${l.cantidad} × ${money(l.p.precio)}`">
           <template #prepend>
@@ -48,7 +48,12 @@ const irCheckout = () => { drawer.value = false; router.push('/checkout') }
               <span v-else>{{ l.p.icono }}</span>
             </v-avatar>
           </template>
-          <template #append><v-btn :icon="mdiMinus" size="x-small" color="primary" @click="cart.restar(l.p.id)" /></template>
+          <template #append>
+  <div class="d-flex ga-2">
+    <v-btn :icon="mdiMinus" size="x-small" color="primary" @click="cart.restar(l.p.id)" />
+    <v-btn :icon="mdiPlus" size="x-small" color="primary" :disabled="l.cantidad >= l.p.disponible" @click="cart.add(l.p)" />
+  </div>
+</template>
         </v-list-item>
       </v-list>
       <p v-else class="pa-4 text-medium-emphasis">Aún no agregas arreglos.</p>

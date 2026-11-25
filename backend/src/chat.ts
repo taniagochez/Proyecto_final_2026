@@ -1,6 +1,6 @@
 // Asistente de IA (Claude) para la tienda. La API key vive SOLO aquí, en el servidor.
 import { Request, Response, Router } from 'express'
-import { db, disponible } from './db'
+import { disponible, insumos, productos, sinId } from './db'
 
 // Proveedor: si hay OPENROUTER_API_KEY se usa OpenRouter (hay modelos gratuitos); si no, Anthropic.
 const OPENROUTER_URL = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1') + '/chat/completions'
@@ -12,9 +12,10 @@ const MAX_CARACTERES = 1000 // por mensaje del usuario
 const MAX_TARJETAS = 3 // productos que el asistente puede mostrar con botón "Agregar"
 
 /** Prompt de sistema: se reconstruye en cada petición para usar el catálogo y la disponibilidad reales. */
-function systemPrompt(): string {
-  const catalogo = db.productos
-    .map((p) => `[${p.id}] ${p.nombre} | Ocasión: ${p.categoria} | $${p.precio.toFixed(2)} | Disponibles: ${disponible(p)} | ${p.descripcion}`)
+async function systemPrompt(): Promise<string> {
+  const [prods, ins] = await Promise.all([productos.find({}, sinId).sort({ _id: 1 }).toArray(), insumos.find({}, sinId).toArray()])
+  const catalogo = prods
+    .map((p) => `[${p.id}] ${p.nombre} | Ocasión: ${p.categoria} | $${p.precio.toFixed(2)} | Disponibles: ${disponible(p, ins)} | ${p.descripcion}`)
     .join('\n')
   const ahora = new Date().toLocaleString('es-SV', { dateStyle: 'full', timeStyle: 'short', timeZone: 'America/El_Salvador' })
 
@@ -121,13 +122,14 @@ r.post('/chat', async (req: Request, res: Response) => {
   if (!messages) return fail(400, 'Mensaje inválido')
 
   try {
-    let texto = await conReintento(systemPrompt(), messages)
+    let texto = await conReintento(await systemPrompt(), messages)
     texto = texto.replace(/<think>[\s\S]*?<\/think>/gi, '') // algunos modelos exponen su razonamiento
 
     // Extrae las etiquetas [[producto:ID]], valida que existan y las quita del texto visible
+    const cat = await productos.find({}, { projection: { id: 1, nombre: 1, _id: 0 } }).toArray()
     const ids: string[] = []
     for (const m of texto.matchAll(/\[\[producto:([\w-]+)\]\]/g)) {
-      if (db.productos.some((p) => p.id === m[1]) && !ids.includes(m[1])) ids.push(m[1])
+      if (cat.some((p) => p.id === m[1]) && !ids.includes(m[1])) ids.push(m[1])
     }
     const reply = texto
       .replace(/\[\[producto:[^\]]*\]\]/g, '')
@@ -137,7 +139,7 @@ r.post('/chat', async (req: Request, res: Response) => {
     // Respaldo: si el modelo olvidó las etiquetas pero nombró arreglos del catálogo, se muestran igualmente
     if (!ids.length) {
       const bajo = reply.toLowerCase()
-      for (const p of db.productos) if (bajo.includes(p.nombre.toLowerCase()) && !ids.includes(p.id)) ids.push(p.id)
+      for (const p of cat) if (bajo.includes(p.nombre.toLowerCase()) && !ids.includes(p.id)) ids.push(p.id)
     }
     res.json({ reply: reply || 'Lo siento, no pude generar una respuesta. ¿Puedes reformular tu pregunta?', productos: ids.slice(0, MAX_TARJETAS) })
   } catch (e) {

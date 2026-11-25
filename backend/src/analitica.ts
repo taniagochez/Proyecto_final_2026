@@ -1,6 +1,6 @@
 // Reportes del dashboard: más vendidos, clientes y fechas importantes.
 // Cuenta pedidos no cancelados y los ubica por su FECHA DE RETIRO (cuándo se entrega el arreglo).
-import { db } from './db'
+import type { Pedido } from './db'
 import { fechaLocal } from './tiempo'
 
 /** Fechas especiales (El Salvador). Se pueden ajustar aquí sin tocar nada más. */
@@ -18,9 +18,9 @@ export const FECHAS_IMPORTANTES = [
 export const VENTANA_DIAS = 1
 
 const dias = (anio: number, mes: number, dia: number) => Math.round(Date.UTC(anio, mes - 1, dia) / 86_400_000)
-const unidades = (p: (typeof db.pedidos)[number]) => p.items.reduce((s, i) => s + i.cantidad, 0)
+const unidades = (p: Pedido) => p.items.reduce((s, i) => s + i.cantidad, 0)
 
-function topProductos(pedidos: typeof db.pedidos, limite = 0) {
+function topProductos(pedidos: Pedido[], limite = 0) {
   const m = new Map<string, { nombre: string; cantidad: number; ingresos: number }>()
   for (const p of pedidos) for (const i of p.items) {
     const x = m.get(i.productoId) ?? { nombre: i.nombre, cantidad: 0, ingresos: 0 }
@@ -31,8 +31,8 @@ function topProductos(pedidos: typeof db.pedidos, limite = 0) {
 }
 
 /** anio = 0 significa "todos los años". */
-export function analitica(anio: number, mes: number) {
-  const validos = db.pedidos.filter((p) => p.estado !== 'Cancelado').map((p) => ({ p, f: fechaLocal(p.retiro) }))
+export function analitica(todos: Pedido[], anio: number, mes: number) {
+  const validos = todos.filter((p) => p.estado !== 'Cancelado').map((p) => ({ p, f: fechaLocal(p.retiro) }))
   const actual = fechaLocal(Date.now()).anio
   const anios = [...new Set([actual, ...validos.map((v) => v.f.anio)])].sort((a, b) => b - a)
   const sel = validos.filter((v) => !anio || v.f.anio === anio)
