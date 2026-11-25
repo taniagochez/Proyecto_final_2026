@@ -119,7 +119,7 @@ r.get('/pedidos/disponibilidad', (req, res) => {
   res.json({ fecha, max: MAX_PEDIDOS_POR_HORA, horas })
 })
 
-r.post('/pedidos', (req, res) => {
+  r.post('/pedidos', auth(), (req, res) => {
   const { cliente, retiro, items, mensajeTarjeta = '', metodoPago } = req.body ?? {}
   const err = (m: string, c = 400) => void res.status(c).json({ error: m })
   if (!cliente?.nombre?.trim()) return err('El nombre es obligatorio')

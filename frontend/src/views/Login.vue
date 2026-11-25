@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../stores'
 
 const auth = useAuth(), router = useRouter()
@@ -10,7 +10,11 @@ const correoOk = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo.value.t
 const registroOk = computed(() => nombre.value.trim().length >= 2 && correoOk.value && pw.value.length >= 6 && pw.value === pw2.value)
 const cambiar = () => { error.value = '' }
 
-const destino = () => router.push(auth.user?.rol === 'Cliente' ? '/' : '/pedidos')
+const route = useRoute()
+const destino = () => {
+  const volver = String(route.query.redirect ?? '')
+  router.push(volver.startsWith('/') ? volver : auth.user?.rol === 'Cliente' ? '/' : '/pedidos')
+}
 const entrar = async () => {
   error.value = ''
   if (await auth.login(correo.value, pw.value)) destino(); else error.value = 'Credenciales incorrectas'

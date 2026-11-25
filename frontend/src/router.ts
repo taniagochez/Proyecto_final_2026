@@ -6,7 +6,7 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: () => import('./views/Catalog.vue') },
-    { path: '/checkout', component: () => import('./views/Checkout.vue') },
+    { path: '/checkout', component: () => import('./views/Checkout.vue'), meta: { login: true } },
     { path: '/login', component: () => import('./views/Login.vue') },
     { path: '/pedidos', component: () => import('./views/Orders.vue'), meta: { roles: ['Administrador', 'Encargado'] } },
     { path: '/inventario', component: () => import('./views/Inventory.vue'), meta: { roles: ['Administrador'] } },
@@ -14,11 +14,13 @@ const router = createRouter({
   ]
 })
 
-// Guardias de navegación por rol
+// Guardias: páginas con login obligatorio y páginas por rol
 router.beforeEach((to) => {
   const roles = to.meta.roles as Rol[] | undefined
-  if (!roles) return true
+  if (!roles && !to.meta.login) return true
   const user = useAuth().user
-  return user && roles.includes(user.rol) ? true : '/login'
+  if (!user) return { path: '/login', query: { redirect: to.fullPath } }
+  if (roles && !roles.includes(user.rol)) return '/'
+  return true
 })
 export default router

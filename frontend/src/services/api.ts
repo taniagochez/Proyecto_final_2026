@@ -9,7 +9,7 @@ api.interceptors.request.use((c) => {
 })
 api.interceptors.response.use((r) => r, (e) => {
   if (e.response?.status === 401 && localStorage.getItem('hg_token')) {
-    localStorage.removeItem('hg_token'); localStorage.removeItem('hg_user'); location.hash = '#/login'
+    localStorage.removeItem('hg_token'); localStorage.removeItem('hg_user'); window.dispatchEvent(new Event('hg:sesion-expirada')); location.hash = '#/login'
   }
   return Promise.reject(e)
 })

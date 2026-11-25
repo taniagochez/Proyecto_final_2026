@@ -47,7 +47,17 @@ export const useCart = defineStore('cart', () => {
 })
 
 export const useAuth = defineStore('auth', () => {
+  // La sesión solo vale si hay un token que no haya vencido
+  const tokenVigente = () => {
+    try {
+      const t = localStorage.getItem('hg_token'); if (!t) return false
+      const { exp } = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+      return exp * 1000 > Date.now()
+    } catch { return false }
+  }
+  if (!tokenVigente()) { localStorage.removeItem('hg_user'); localStorage.removeItem('hg_token') }
   const user = ref<Usuario | null>(JSON.parse(localStorage.getItem('hg_user') || 'null'))
+  window.addEventListener('hg:sesion-expirada', () => { user.value = null })
   async function login(correo: string, password: string) {
     try {
       const { data } = await api.post('/auth/login', { correo, password })

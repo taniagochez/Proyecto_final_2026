@@ -23,7 +23,7 @@ npm run dev
 ```
 
 - Tienda / sistema: http://localhost:5173
-- **Swagger UI:** http://localhost:3000/api/docs  (JSON: `/api/openapi.json`)
+- **Swagger UI:** http://localhost:3000/api/docs — el navegador pide usuario y contraseña; solo entra el Administrador (usuario = su correo, ej. `admin@hi.com` / `admin123`). El enlace también se imprime al iniciar el backend.
 
 Extensión recomendada: **Vue - Official (Volar)**.
 
